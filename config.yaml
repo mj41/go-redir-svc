@@ -1,0 +1,23 @@
+# gl:readme.md#L20
+groups:
+  example-com:
+    log_file: "example-com.jsonl"
+    target_base: "https://example.com"
+    allowed_schemes: ["http", "https"]
+    domains:
+      - name: example.com
+        allowed_schemes: ["http"]
+      - name: www.example.com
+      - name: old.example.com
+      - name: legacy.example.com
+
+  example-org:
+    log_file: "example-org.jsonl"
+    target_base: "https://example.org"
+    allowed_schemes: ["http", "https"]
+    domains:
+      - name: example.org
+        allowed_schemes: ["http"]
+      - name: www.example.org
+      - name: blog.example.org
+      - name: www.blog.example.org

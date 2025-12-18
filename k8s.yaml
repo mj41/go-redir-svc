@@ -1,0 +1,168 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go-redir-svc-config
+  namespace: default
+# gl:readme.md#L20
+data:
+  config.yaml: |
+    groups:
+      example-com:
+        log_file: "example-com.jsonl"
+        target_base: "https://example.com"
+        allowed_schemes: ["http", "https"]
+        domains:
+          - name: example.com
+            allowed_schemes: ["http"]
+          - name: www.example.com
+          - name: old.example.com
+          - name: legacy.example.com
+      example-org:
+        log_file: "example-org.jsonl"
+        target_base: "https://example.org"
+        allowed_schemes: ["http", "https"]
+        domains:
+          - name: example.org
+            allowed_schemes: ["http"]
+          - name: www.example.org
+          - name: blog.example.org
+          - name: www.blog.example.org
+---
+# gl:readme.md#L57
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: go-redir-svc-logs
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-redir-svc
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-redir-svc
+  template:
+    metadata:
+      labels:
+        app: go-redir-svc
+    spec:
+      containers:
+      - name: go-redir-svc
+        image: ghcr.io/mj41/go-redir-svc:latest
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+        - name: logs
+          mountPath: /var/log/redirects
+      volumes:
+      - name: config
+        configMap:
+          name: go-redir-svc-config
+      - name: logs
+        persistentVolumeClaim:
+          claimName: go-redir-svc-logs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-redir-svc
+  namespace: default
+spec:
+  selector:
+    app: go-redir-svc
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+# Certificates (Grouped)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: redirects-example-com
+  namespace: envoy-gateway-system
+spec:
+  secretName: redirects-example-com-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  dnsNames:
+    - example.com
+    - www.example.com
+    - old.example.com
+    - legacy.example.com
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: redirects-example-org
+  namespace: envoy-gateway-system
+spec:
+  secretName: redirects-example-org-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  dnsNames:
+    - example.org
+    - www.example.org
+    - blog.example.org
+    - www.blog.example.org
+---
+# HTTPRoutes (Grouped)
+# gl:readme.md#L61
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redirects-example-com
+  namespace: envoy-gateway-system
+spec:
+  parentRefs:
+    - name: web-gateway
+      sectionName: https
+    - name: web-gateway
+      sectionName: http
+  hostnames:
+    - example.com
+    - www.example.com
+    - old.example.com
+    - legacy.example.com
+  rules:
+    - backendRefs:
+        - name: go-redir-svc
+          namespace: default
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redirects-example-org
+  namespace: envoy-gateway-system
+spec:
+  parentRefs:
+    - name: web-gateway
+      sectionName: https
+    - name: web-gateway
+      sectionName: http
+  hostnames:
+    - example.org
+    - www.example.org
+    - blog.example.org
+    - www.blog.example.org
+  rules:
+    - backendRefs:
+        - name: go-redir-svc
+          namespace: default
+          port: 80
