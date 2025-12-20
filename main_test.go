@@ -45,9 +45,19 @@ func TestHandleRedirect(t *testing.T) {
 				LogFile:        "test.jsonl",
 				TargetBase:     "https://example.com",
 				AllowedSchemes: []string{"http", "https"},
+				PreservePath:   true, // For backward compatibility in tests
 				Domains: []DomainConfig{
 					{Name: "test.example.com", AllowedSchemes: []string{"http", "https"}},
 					{Name: "www.test.example.com", AllowedSchemes: nil},
+				},
+			},
+			"test-group-strip": {
+				LogFile:        "test-strip.jsonl",
+				TargetBase:     "https://example.org",
+				AllowedSchemes: []string{"http", "https"},
+				PreservePath:   false, // Test path stripping
+				Domains: []DomainConfig{
+					{Name: "strip.example.com", AllowedSchemes: []string{"http", "https"}},
 				},
 			},
 		},
@@ -57,6 +67,7 @@ func TestHandleRedirect(t *testing.T) {
 	domainToInfo = map[string]DomainInfo{
 		"test.example.com":     {GroupName: "test-group", AllowedSchemes: []string{"http", "https"}},
 		"www.test.example.com": {GroupName: "test-group", AllowedSchemes: nil},
+		"strip.example.com":    {GroupName: "test-group-strip", AllowedSchemes: []string{"http", "https"}},
 	}
 
 	// Initialize log files
@@ -67,6 +78,13 @@ func TestHandleRedirect(t *testing.T) {
 	}
 	defer f.Close()
 	logFiles["test-group"] = f
+
+	f2, err := os.Create(filepath.Join(tempDir, "test-strip.jsonl"))
+	if err != nil {
+		t.Fatalf("failed to create log file: %v", err)
+	}
+	defer f2.Close()
+	logFiles["test-group-strip"] = f2
 
 	tests := []struct {
 		name           string
@@ -99,6 +117,22 @@ func TestHandleRedirect(t *testing.T) {
 			scheme:         "https",
 			expectedStatus: http.StatusNotFound,
 			expectedTarget: "",
+		},
+		{
+			name:           "strip path when preserve_path is false",
+			host:           "strip.example.com",
+			path:           "/some/path",
+			scheme:         "https",
+			expectedStatus: http.StatusMovedPermanently,
+			expectedTarget: "https://example.org",
+		},
+		{
+			name:           "strip path with query string",
+			host:           "strip.example.com",
+			path:           "/some/path?query=value",
+			scheme:         "https",
+			expectedStatus: http.StatusMovedPermanently,
+			expectedTarget: "https://example.org?query=value",
 		},
 	}
 

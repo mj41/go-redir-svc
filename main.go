@@ -26,6 +26,7 @@ type GroupConfig struct {
 	TargetBase     string         `yaml:"target_base"`
 	Domains        []DomainConfig `yaml:"domains"`
 	AllowedSchemes []string       `yaml:"allowed_schemes"`
+	PreservePath   bool           `yaml:"preserve_path"` // Default false - strips URL path
 }
 
 type DomainConfig struct {
@@ -157,7 +158,11 @@ func handleRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target := group.TargetBase + r.URL.Path
+	// Build target URL
+	target := group.TargetBase
+	if group.PreservePath {
+		target += r.URL.Path
+	}
 	if r.URL.RawQuery != "" {
 		target += "?" + r.URL.RawQuery
 	}
