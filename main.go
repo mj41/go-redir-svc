@@ -82,6 +82,12 @@ func main() {
 		log.Fatalf("Error creating log directory: %v", err)
 	}
 
+	// Normalize config: strip trailing slashes from target_base
+	for groupName, group := range config.Groups {
+		group.TargetBase = strings.TrimRight(group.TargetBase, "/")
+		config.Groups[groupName] = group
+	}
+
 	for groupName, group := range config.Groups {
 		for _, domainCfg := range group.Domains {
 			domainToInfo[strings.ToLower(domainCfg.Name)] = DomainInfo{
