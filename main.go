@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -54,7 +53,7 @@ type DomainInfo struct {
 var (
 	config       Config
 	domainToInfo map[string]DomainInfo
-	logFiles     map[string]*os.File
+	logFiles     map[string]*dayLog
 	logMutex     sync.Mutex
 )
 
@@ -75,7 +74,8 @@ func main() {
 
 	// Initialize maps
 	domainToInfo = make(map[string]DomainInfo)
-	logFiles = make(map[string]*os.File)
+	logFiles = make(map[string]*dayLog)
+	host := hostName()
 
 	// Ensure log directory exists
 	if err := os.MkdirAll(*logDir, 0755); err != nil {
@@ -96,12 +96,8 @@ func main() {
 			}
 		}
 
-		// Open log file for each group
-		f, err := os.OpenFile(filepath.Join(*logDir, group.LogFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatalf("Error opening log file for group %s: %v", groupName, err)
-		}
-		logFiles[groupName] = f
+		// A log file per group and UTC day, opened at its first line (logfile.go)
+		logFiles[groupName] = newDayLog(*logDir, group.LogFile, host)
 	}
 
 	http.HandleFunc("/", handleRedirect)
@@ -216,7 +212,7 @@ func logJSON(groupName string, entry LogEntry) {
 		return
 	}
 
-	if _, err := f.Write(append(data, '\n')); err != nil {
+	if err := f.write(time.Now(), append(data, '\n')); err != nil {
 		log.Printf("Error writing to log file: %v", err)
 	}
 }

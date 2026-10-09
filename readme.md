@@ -9,8 +9,12 @@ A lightweight Go service for handling domain redirects with custom JSONL logging
 - **Deployment**: A single `k8s.yaml` file containing all Kubernetes resources (Deployment, Service, PVC, ConfigMap, Certificates, HTTPRoutes).
 - **Logging**: 
     - Custom JSONL format (including `timestamp`, `group`, `scheme`, `host`, `path`, `referer`, `user_agent`, `client_ip`, `target`).
-    - Persistent storage via a Persistent Volume (PV) mounted at `/var/log/redirects`.
-    - **Per-group logging**: Each group of sites logs to its own dedicated file (e.g., `shiftate.jsonl`).
+    - **Per-group and per-day logging**: each group of sites logs to its own file for each UTC day,
+      `<log_file without .jsonl>-<YYYY-MM-DD>-<host>.jsonl` (e.g. `shiftate-2026-10-09-go-redir-svc-7d9….jsonl`)
+      in `-log-dir` (`/var/log/redirects`). A day's file is not written once the day is over, so anything
+      may take it away; the host part keeps two pods from writing the same file.
+    - In the cluster (mj41-linode `apps/base/go-redir-svc`): the log directory is local disk (an
+      `emptyDir`), and a sidecar moves the finished days to Object Storage, encrypted.
 - **TLS/DNS**: 
     - Domains are grouped to share `Certificate` objects (cert-manager).
     - `HTTPRoute` objects route traffic from the Gateway to this service.
@@ -47,7 +51,8 @@ groups:
 ## Kubernetes Integration
 
 ### 1. Storage
-A `PersistentVolumeClaim` (PVC) is used to ensure logs persist across pod restarts and can be analyzed later.
+Local disk for today's files; the finished days go to Object Storage (a sidecar in the cluster's
+manifests). No volume.
 
 ### 2. Routing & TLS
 For each group defined in the config, we maintain:

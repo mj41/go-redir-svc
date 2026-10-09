@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestHandleHealth(t *testing.T) {
@@ -71,20 +72,15 @@ func TestHandleRedirect(t *testing.T) {
 	}
 
 	// Initialize log files
-	logFiles = make(map[string]*os.File)
-	f, err := os.Create(filepath.Join(tempDir, "test.jsonl"))
-	if err != nil {
-		t.Fatalf("failed to create log file: %v", err)
+	logFiles = map[string]*dayLog{
+		"test-group":       newDayLog(tempDir, "test.jsonl", "pod-a"),
+		"test-group-strip": newDayLog(tempDir, "test-strip.jsonl", "pod-a"),
 	}
-	defer f.Close()
-	logFiles["test-group"] = f
-
-	f2, err := os.Create(filepath.Join(tempDir, "test-strip.jsonl"))
-	if err != nil {
-		t.Fatalf("failed to create log file: %v", err)
-	}
-	defer f2.Close()
-	logFiles["test-group-strip"] = f2
+	defer func() {
+		for _, l := range logFiles {
+			l.Close()
+		}
+	}()
 
 	tests := []struct {
 		name           string
@@ -206,5 +202,38 @@ func TestGetIP(t *testing.T) {
 				t.Errorf("expected IP %s, got %s", tt.expectedIP, ip)
 			}
 		})
+	}
+}
+
+func TestDayLog(t *testing.T) {
+	dir := t.TempDir()
+	l := newDayLog(dir, "shiftate.jsonl", "pod-a")
+	defer l.Close()
+	day1 := time.Date(2026, 10, 9, 23, 59, 0, 0, time.UTC)
+	day2 := time.Date(2026, 10, 10, 0, 0, 1, 0, time.UTC)
+	for _, w := range []struct {
+		at   time.Time
+		line string
+	}{{day1, "a\n"}, {day1, "b\n"}, {day2, "c\n"}} {
+		if err := l.write(w.at, []byte(w.line)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, want := range map[string]string{
+		"shiftate-2026-10-09-pod-a.jsonl": "a\nb\n",
+		"shiftate-2026-10-10-pod-a.jsonl": "c\n",
+	} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil || string(b) != want {
+			t.Errorf("%s: %q, %v; want %q", name, b, err, want)
+		}
+	}
+	// A local time zone does not move the day: the day is UTC's.
+	prague := time.FixedZone("CEST", 2*3600)
+	if err := l.write(time.Date(2026, 10, 10, 1, 30, 0, 0, prague), []byte("d\n")); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "shiftate-2026-10-09-pod-a.jsonl")); string(b) != "a\nb\nd\n" {
+		t.Errorf("01:30 CEST is 23:30 UTC the day before: %q", b)
 	}
 }
